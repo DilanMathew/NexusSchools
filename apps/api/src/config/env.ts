@@ -12,7 +12,8 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   AI_PROVIDER: z.enum(['none', 'anthropic']).default('none'),
   ANTHROPIC_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default('claude-sonnet-5-5'),
+  AI_MODEL: z.string().default('claude-opus-5-5'),
+  AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   LOG_LEVEL: z.string().default('info'),
 });
 

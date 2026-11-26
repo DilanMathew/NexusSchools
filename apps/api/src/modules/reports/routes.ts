@@ -14,16 +14,40 @@ import { band, consecutiveAbsentDays, maxMissable, pctFromCounts, policySnapshot
 import { countedSessions, groupedStatusCounts, sessionScopeFilter } from '../analytics/queries.js';
 import { submissionCompliance } from '../analytics/routes.js';
 import { toCsv } from './csv.js';
+import ExcelJS from 'exceljs';
+const toTable = (headers: string[], rows: Table['rows'], preamble?: string[]): Table => ({ headers, rows, preamble });
 
 export const reportsRouter = Router();
 reportsRouter.use(requirePermission('reports.read'));
 
-const fmt = z.enum(['json', 'csv']).default('json');
-function send(res: Response, format: 'json' | 'csv', name: string, json: unknown, csv: () => string) {
+const fmt = z.enum(['json', 'csv', 'xlsx']).default('json');
+interface Table { headers: string[]; rows: (string | number | null | undefined)[][]; preamble?: string[] }
+
+/** One table definition, three formats: JSON for the UI, CSV, and a real Excel workbook. */
+async function send(res: Response, format: 'json' | 'csv' | 'xlsx', name: string, json: unknown, table: () => Table) {
   if (format === 'csv') {
+    const t = table();
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${name}.csv"`);
-    return res.send('﻿' + csv());
+    return res.send('\uFEFF' + toCsv(t.headers, t.rows, t.preamble));
+  }
+  if (format === 'xlsx') {
+    const t = table();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'NEXUS AttendIQ';
+    const ws = wb.addWorksheet('Report');
+    for (const line of t.preamble ?? []) ws.addRow([line]).font = { italic: true, color: { argb: 'FF64748B' } };
+    if (t.preamble?.length) ws.addRow([]);
+    const head = ws.addRow(t.headers);
+    head.font = { bold: true };
+    head.eachCell((c) => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7FF' } }; });
+    // Values are written as plain cells; a string that looks like a formula stays text.
+    for (const r of t.rows) ws.addRow(r.map((v) => (v === null || v === undefined ? '' : v)));
+    ws.columns.forEach((col, i) => { col.width = Math.min(40, Math.max(8, (t.headers[i]?.length ?? 8), ...t.rows.slice(0, 200).map((r) => String(r[i] ?? '').length)) + 2); });
+    ws.views = [{ state: 'frozen', ySplit: head.number }];
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}.xlsx"`);
+    return res.send(Buffer.from(await wb.xlsx.writeBuffer()));
   }
   res.json(json);
 }
@@ -83,7 +107,7 @@ reportsRouter.get('/students', async (req, res) => {
   full.sort(sorters[q.sort]);
   await auditReq(db, req, { action: 'report.generated', entityType: 'report', entityId: 'students', metadata: { ...q, rows: full.length } });
   const snap = policySnapshot(p);
-  send(res, q.format, `attendance-report-${from}-to-${to}`, { data: full, meta: { from, to, policy: snap, generatedAt: new Date().toISOString() } }, () => toCsv(
+  await send(res, q.format, `attendance-report-${from}-to-${to}`, { data: full, meta: { from, to, policy: snap, generatedAt: new Date().toISOString() } }, () => toTable(
     ['Admission No', 'Roll', 'Name', 'Class', 'Attended', 'Counted', 'Percentage', 'Absent', 'Late', 'Leave', 'Band', 'Sessions needed', 'Can miss'],
     full.map((r) => [r.admissionNumber, r.rollNumber, r.name, r.classLabel, r.attended as number, r.conducted as number, r.percentage as number, r.absent as number, r.late as number, r.leave as number, r.band, r.sessionsNeeded, r.maxMissable]),
     [`NEXUS AttendIQ attendance report ${from} to ${to}`, `Policy v${snap.version}: unit=${snap.calculationUnit}, late=${snap.lateWeight}, eligibility=${snap.eligibilityThreshold}%`, 'Indicative figures; official eligibility is decided by the institution.'],
@@ -119,7 +143,7 @@ reportsRouter.get('/monthly-register', async (req, res) => {
     const sum = summarize(mine, p);
     return { studentId: s.id, name: `${s.firstName} ${s.lastName}`.trim(), admissionNumber: s.admissionNumber, rollNumber: s.rollNumber, marks, percentage: sum.percentage, conducted: sum.conducted };
   });
-  send(res, q.format, `monthly-register-${sec.level}-${sec.name}-${q.month}`.replace(/\s+/g, '_'), { data: { section: `${sec.level} ${sec.name}`, month: q.month, days, rows, legend: code } }, () => toCsv(
+  await send(res, q.format, `monthly-register-${sec.level}-${sec.name}-${q.month}`.replace(/\s+/g, '_'), { data: { section: `${sec.level} ${sec.name}`, month: q.month, days, rows, legend: code } }, () => toTable(
     ['Roll', 'Admission No', 'Name', ...days.map((d) => d.slice(8)), '%'], rows.map((r) => [r.rollNumber, r.admissionNumber, r.name, ...r.marks, r.percentage]), [`Monthly register: ${sec.level} ${sec.name}, ${q.month}`]));
 });
 
@@ -136,7 +160,7 @@ reportsRouter.get('/daily-register', async (req, res) => {
   const recs = sess.length ? await db.select().from(attendanceRecords).where(inArray(attendanceRecords.sessionId, sess.map((s) => s.id))) : [];
   const cols = sess.map((s) => ({ id: s.id, label: s.kind === 'daily' ? 'Daily' : `${s.period ?? ''} ${s.subject ?? ''}`.trim(), status: s.status }));
   const rows = roster.map((st) => ({ name: `${st.firstName} ${st.lastName}`.trim(), rollNumber: st.rollNumber, admissionNumber: st.admissionNumber, marks: cols.map((c) => recs.find((r) => r.sessionId === c.id && r.studentId === st.id)?.status ?? null) }));
-  send(res, q.format, `daily-register-${q.date}`, { data: { date: q.date, sessions: cols, rows } }, () => toCsv(['Roll', 'Admission No', 'Name', ...cols.map((c) => c.label)], rows.map((r) => [r.rollNumber, r.admissionNumber, r.name, ...r.marks])));
+  await send(res, q.format, `daily-register-${q.date}`, { data: { date: q.date, sessions: cols, rows } }, () => toTable(['Roll', 'Admission No', 'Name', ...cols.map((c) => c.label)], rows.map((r) => [r.rollNumber, r.admissionNumber, r.name, ...r.marks])));
 });
 
 /** Students absent for N or more consecutive counted days (up to `to`). */
@@ -155,7 +179,7 @@ reportsRouter.get('/consecutive-absences', async (req, res) => {
     .from(students).leftJoin(studentEnrolments, and(eq(studentEnrolments.studentId, students.id), eq(studentEnrolments.isActive, true))).leftJoin(sections, eq(sections.id, studentEnrolments.sectionId)).leftJoin(classLevels, eq(classLevels.id, sections.classLevelId)).leftJoin(departments, eq(departments.id, sections.departmentId))
     .where(inArray(students.id, hits.map((h) => h.studentId))) : [];
   const rows = hits.map((h) => { const m = meta.find((x) => x.id === h.studentId); return { ...h, name: m?.name, admissionNumber: m?.admissionNumber, classLabel: `${m?.level ?? ''} ${m?.section ?? ''}`.trim() }; });
-  send(res, q.format, `consecutive-absences-${to}`, { data: rows, meta: { from, to, minDays: q.minDays } }, () => toCsv(['Admission No', 'Name', 'Class', 'Current run (days)', 'Longest run', 'Last absent'], rows.map((r) => [r.admissionNumber, r.name, r.classLabel, r.current, r.longest, r.lastAbsent])));
+  await send(res, q.format, `consecutive-absences-${to}`, { data: rows, meta: { from, to, minDays: q.minDays } }, () => toTable(['Admission No', 'Name', 'Class', 'Current run (days)', 'Longest run', 'Last absent'], rows.map((r) => [r.admissionNumber, r.name, r.classLabel, r.current, r.longest, r.lastAbsent])));
 });
 
 reportsRouter.get('/compliance', async (req, res) => {
@@ -163,6 +187,6 @@ reportsRouter.get('/compliance', async (req, res) => {
   const q = parse(z.object({ from: isoDate.optional(), to: isoDate.optional(), format: fmt }), req.query);
   const to = q.to ?? todayIn(ctx.timezone);
   const data = await submissionCompliance(ctx.institutionId, q.from ?? addDays(to, -6), to);
-  send(res, q.format, `submission-compliance-${data.from}-${data.to}`, { data }, () => toCsv(['Faculty', 'Expected', 'Submitted', 'Pending', 'Cancelled', 'Compliance %'], data.staff.map((s) => [s.staffName, s.expected, s.submitted, s.pending, s.cancelled, s.complianceRate])));
+  await send(res, q.format, `submission-compliance-${data.from}-${data.to}`, { data }, () => toTable(['Faculty', 'Expected', 'Submitted', 'Pending', 'Cancelled', 'Compliance %'], data.staff.map((s) => [s.staffName, s.expected, s.submitted, s.pending, s.cancelled, s.complianceRate])));
 });
 void departments;

@@ -61,8 +61,7 @@ export function Layout() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); window.removeEventListener('aiq-queue', q); };
   }, []);
 
-  const READY = new Set(['/dashboard', '/attendance', '/attendance/sessions', '/corrections']);
-  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => READY.has(i.to) && (i.platform ? user?.platformRole === 'super_admin' : !i.perms || can(...i.perms))) })).filter((g) => g.items.length && (context || g.items.some((i) => i.platform)));
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => (i.platform ? user?.platformRole === 'super_admin' : !i.perms || can(...i.perms))) })).filter((g) => g.items.length && (context || g.items.some((i) => i.platform)));
   const roleLabel = memberships.find((m) => m.institutionId === context?.institutionId)?.roles.map((r) => r.name).join(', ');
 
   const sidebar = (mobile: boolean) => (

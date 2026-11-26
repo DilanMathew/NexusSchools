@@ -211,3 +211,19 @@ describe('platform admin', () => {
     expect((await api({ token: sa, institutionId: A.institutionId }).get('/students')).status).toBe(403);
   });
 });
+
+describe('structure deletion safety', () => {
+  it('refuses to delete a section or offering that has attendance', async () => {
+    const A = await registerInstitution();
+    const s = await buildSchool(A);
+    const t = api({ token: s.teacherToken, institutionId: A.institutionId });
+    const sess = (await t.post('/attendance/sessions', { kind: 'daily', date: today(), sectionId: s.section.id })).body.data;
+    expect(sess.id).toBeTruthy();
+    expect((await api(A).delete(`/academic/sections/${s.section.id}`)).status).toBe(409);
+    const off = (await t.post('/attendance/sessions', { kind: 'subject', date: today(), courseOfferingId: s.offering.id })).body.data;
+    expect(off.id).toBeTruthy();
+    expect((await api(A).delete(`/academic/offerings/${s.offering.id}`)).status).toBe(409);
+    const lvl = (await api(A).post('/academic/class-levels', { name: 'Unused', ordinal: 99 })).body.data;
+    expect((await api(A).delete(`/academic/class-levels/${lvl.id}`)).status).toBe(200);
+  });
+});

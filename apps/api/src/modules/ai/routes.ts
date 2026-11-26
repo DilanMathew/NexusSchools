@@ -4,6 +4,10 @@ import { db, pool } from '../../db/client.js';
 import { students, studentEnrolments, attendanceRecords, attendanceSessions, sections, classLevels } from '../../db/schema/index.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { env } from '../../config/env.js';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import { parse } from '../../lib/http.js';
+import { askBuiltin, askLlm, llmConfigured } from './assistant.js';
 import { addDays, todayIn } from '../../lib/dates.js';
 import { attendanceScope } from '../attendance/scope.js';
 import { asPolicyInput, getDefaultPolicy } from '../attendance/service.js';
@@ -12,13 +16,22 @@ import { countedSessions, groupedStatusCounts, sessionScopeFilter } from '../ana
 
 /**
  * Intelligence layer. Everything here is deterministic and rule-based (no LLM) so it works without an AI
- * provider and every flag carries its numbers. The conversational assistant (LLM + permission-aware tools)
- * is planned for Phase 7 and is reported as unavailable by /status until implemented.
+ * provider and every flag carries its numbers. The assistant (POST /assistant) uses an LLM only when configured.
  */
 export const aiRouter = Router();
 
-aiRouter.get('/status', (_req, res) => {
-  res.json({ data: { ruleBasedInsights: true, assistant: { available: false, reason: 'The conversational assistant is not implemented yet (Phase 7).', providerConfigured: env.AI_PROVIDER !== 'none' && !!env.ANTHROPIC_API_KEY } } });
+aiRouter.get('/status', (req, res) => {
+  const allowed = !!req.ctx?.permissions.has('ai.use');
+  res.json({ data: { ruleBasedInsights: true, assistant: { available: allowed, mode: llmConfigured() ? 'llm' : 'builtin', model: llmConfigured() ? env.AI_MODEL : null, reason: allowed ? undefined : 'Your role does not include the assistant.' } } });
+});
+
+const askLimiter = rateLimit({ windowMs: 60_000, limit: env.NODE_ENV === 'test' ? 1000 : 10, keyGenerator: (req) => req.auth?.userId ?? 'anon', standardHeaders: true, legacyHeaders: false });
+
+/** Institutional assistant. Read-only, permission-aware tools; LLM when configured, built-in question set otherwise. */
+aiRouter.post('/assistant', requirePermission('ai.use'), askLimiter, async (req, res) => {
+  const { question } = parse(z.object({ question: z.string().trim().min(3).max(500) }), req.body);
+  const out = llmConfigured() ? await askLlm(req.ctx!, req.auth!.userId, question) : await askBuiltin(req.ctx!, req.auth!.userId, question);
+  res.json({ data: out });
 });
 
 /** Attendance Intelligence: sudden drops — students whose last-14-day rate fell ≥ 20 points vs the prior 28 days. */

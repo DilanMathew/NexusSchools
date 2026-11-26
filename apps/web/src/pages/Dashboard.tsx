@@ -8,6 +8,7 @@ import { GroupBars, TrendChart } from '../components/charts';
 import { BAND_META } from '../lib/types';
 import { fmtDate, fmtDateTime, fmtPct, fmtTime, titleCase } from '../lib/format';
 import { TodayPanel } from './attendance/TakeAttendance';
+import { ChildrenOverview } from './portal/MyAttendance';
 
 interface Overview {
   date: string; range: { from: string; to: string }; policy: { eligibilityThreshold: number; calculationUnit: string; version: number }; scope: string; totalStudents: number;
@@ -25,7 +26,7 @@ export default function Dashboard() {
     <div>
       <PageHeader title={`Welcome, ${user?.fullName.split(' ')[0]}`} subtitle={institution ? `${institution.name} · ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}` : undefined} />
       {!context && <Empty title="You are not a member of any institution" hint="Ask your institution administrator to invite you, or register a new institution." />}
-      {portal && <Empty title="Student & parent portal is in the next build phase" hint="Your attendance is being recorded; the portal screens are not yet released." />}
+      {portal && <ChildrenOverview />}
       {can('attendance.take') && !isStaffView && <TodayPanel compact />}
       {isStaffView && <AdminOverview />}
     </div>

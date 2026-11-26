@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { tenantCrud } from '../../lib/tenant-crud.js';
 import { isoDate } from '../../lib/http.js';
-import { badRequest } from '../../lib/errors.js';
+import { AppError, badRequest } from '../../lib/errors.js';
 import {
   academicYears, academicTerms, departments, programmes, classLevels, subjects, sections, courseOfferings, staff,
   periods, rooms, calendarEvents, institutionBranches,
@@ -19,10 +19,17 @@ const checkRange = async (_c: DbOrTx, _i: string, d: Record<string, unknown>) =>
 
 export const academicRouter = Router();
 
+/** Refuse deleting structure that attendance history depends on (deletion would cascade and lose records). */
+const protectAttendance = (sqlWhere: (id: string) => ReturnType<typeof sql>) => async (conn: DbOrTx, inst: string, id: string) => {
+  const r = await conn.execute<{ n: number }>(sql`select count(*)::int as n from attendance_sessions where institution_id = ${inst} and ${sqlWhere(id)}`);
+  if (r.rows[0].n > 0) throw new AppError(409, 'HAS_ATTENDANCE', `This cannot be deleted: ${r.rows[0].n} attendance session(s) depend on it. Keep it, or archive instead.`);
+};
+
 academicRouter.use('/years', tenantCrud({
   table: academicYears, entity: 'Academic year', readPermission: ['academic.read', 'attendance.self.read', 'attendance.child.read'], writePermission: W,
   createSchema: dateRange({ name: z.string().trim().min(2).max(40), isCurrent: z.boolean().optional() }),
   orderBy: [academicYears.startDate],
+  beforeDelete: protectAttendance((id) => sql`(section_id in (select id from sections where academic_year_id = ${id}) or course_offering_id in (select id from course_offerings where academic_year_id = ${id}))`),
   beforeWrite: async (tx, inst, d, id) => {
     await checkRange(tx, inst, d);
     if (d.isCurrent) await tx.update(academicYears).set({ isCurrent: false }).where(and(eq(academicYears.institutionId, inst), id ? ne(academicYears.id, id) : undefined));
@@ -51,6 +58,7 @@ academicRouter.use('/class-levels', tenantCrud({
   table: classLevels, entity: 'Class level', readPermission: R, writePermission: W,
   createSchema: z.object({ name: z.string().trim().min(1).max(60), ordinal: z.number().int().min(0).max(100).default(0), programmeId: z.string().uuid().nullable().optional() }),
   refs: { programmeId: programmes }, filters: { programmeId: classLevels.programmeId }, orderBy: [classLevels.ordinal, classLevels.name],
+  beforeDelete: protectAttendance((id) => sql`section_id in (select id from sections where class_level_id = ${id})`),
 }));
 
 academicRouter.use('/subjects', tenantCrud({
@@ -65,6 +73,7 @@ academicRouter.use('/sections', tenantCrud({
   refs: { academicYearId: academicYears, classLevelId: classLevels, termId: academicTerms, departmentId: departments, classTeacherStaffId: staff },
   filters: { academicYearId: sections.academicYearId, classLevelId: sections.classLevelId, departmentId: sections.departmentId, classTeacherStaffId: sections.classTeacherStaffId },
   orderBy: [sections.name],
+  beforeDelete: protectAttendance((id) => sql`(section_id = ${id} or course_offering_id in (select id from course_offerings where section_id = ${id}))`),
 }));
 
 academicRouter.use('/offerings', tenantCrud({
@@ -72,6 +81,7 @@ academicRouter.use('/offerings', tenantCrud({
   createSchema: z.object({ academicYearId: z.string().uuid(), subjectId: z.string().uuid(), sectionId: z.string().uuid().nullable().optional(), staffId: z.string().uuid().nullable().optional(), termId: z.string().uuid().nullable().optional(), autoEnrolSection: z.boolean().default(true), label: z.string().max(120).nullable().optional() }),
   refs: { academicYearId: academicYears, subjectId: subjects, sectionId: sections, staffId: staff, termId: academicTerms },
   filters: { academicYearId: courseOfferings.academicYearId, sectionId: courseOfferings.sectionId, staffId: courseOfferings.staffId, subjectId: courseOfferings.subjectId },
+  beforeDelete: protectAttendance((id) => sql`course_offering_id = ${id}`),
   beforeWrite: async (_tx, _i, d) => { if (d.autoEnrolSection && d.sectionId === null) throw badRequest('autoEnrolSection requires a sectionId'); },
 }));
 

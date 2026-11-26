@@ -33,6 +33,8 @@ export interface CrudOptions<T extends AnyTable> {
   orderBy?: PgColumn[];
   softDelete?: boolean;
   beforeWrite?: (conn: DbOrTx, institutionId: string, data: Record<string, unknown>, existingId?: string) => Promise<void>;
+  /** Throw to refuse deletion (e.g. when attendance history depends on the row). */
+  beforeDelete?: (conn: DbOrTx, institutionId: string, id: string) => Promise<void>;
 }
 
 export function tenantCrud<T extends AnyTable>(o: CrudOptions<T>) {
@@ -104,6 +106,7 @@ export function tenantCrud<T extends AnyTable>(o: CrudOptions<T>) {
     const inst = req.ctx!.institutionId;
     const [before] = await db.select().from(o.table as PgTable).where(scope(inst, eq(o.table.id, id)));
     if (!before) throw notFound(o.entity);
+    await o.beforeDelete?.(db, inst, id);
     if (deletedAt) await db.update(o.table).set({ deletedAt: new Date() } as never).where(eq(o.table.id, id));
     else await db.delete(o.table).where(and(eq(o.table.id, id), eq(o.table.institutionId, inst)));
     await auditReq(db, req, { action: `${o.entity.toLowerCase().replace(/\s+/g, '_')}.deleted`, entityType: o.entity, entityId: id, before });
