@@ -396,8 +396,8 @@ async function seedInstitution(cfg: Cfg, demoHash: string) {
   }
 }
 
-async function main() {
-  await runMigrations();
+/** Creates the demo tenants. Safe to re-run: removes and recreates demo data only. */
+export async function seedDemo() {
   await resetDemo();
   const demoHash = await hashPassword(DEMO_PASSWORD);
   await db.insert(users).values({ email: 'superadmin@attendiq.example', fullName: 'NEXUS Platform Admin', passwordHash: demoHash, platformRole: 'super_admin' });
@@ -407,7 +407,8 @@ async function main() {
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}) — DEMO DATA ONLY:`);
   console.log('  Platform admin: superadmin@attendiq.example');
   for (const d of ['abc-school.example', 'xyz-college.example']) console.log(`  ${d}: owner@, admin@, principal@, teacher@, student@, parent@`);
-  await pool.end();
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+if (process.argv[1] && /seed[\\/]index\.(ts|js)$/.test(process.argv[1])) {
+  runMigrations().then(seedDemo).then(() => pool.end()).catch((e) => { console.error(e); process.exit(1); });
+}

@@ -57,7 +57,7 @@ export function LoginPage() {
         <Button className="w-full" size="lg" loading={f.formState.isSubmitting}>Sign in</Button>
       </form>
       <p className="mt-6 text-center text-sm text-slate-500">New institution? <Link to="/register" className="font-medium text-brand-600 hover:underline">Register your school or college</Link></p>
-      {import.meta.env.DEV && (
+      {(import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO === 'true') && (
         <details className="mt-8 rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">
           <summary className="cursor-pointer font-medium">Demo accounts (development seed data)</summary>
           <p className="mt-2">Password for all: <code>Demo@AttendIQ2026</code></p>
