@@ -2,7 +2,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { db, pool } from './client.js';
-import { syncPermissionCatalogue } from '../modules/rbac/catalogue.js';
+import { syncPermissionCatalogue, syncSystemRolePermissions } from '../modules/rbac/catalogue.js';
 import { ensureSubscriptionPlans } from '../modules/subscriptions/plans.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -10,6 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export async function runMigrations() {
   await migrate(db, { migrationsFolder: path.resolve(here, '../../drizzle') });
   await syncPermissionCatalogue(db);
+  await syncSystemRolePermissions(db);
   await ensureSubscriptionPlans(db);
 }
 

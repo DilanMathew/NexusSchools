@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
   Bell, BookOpen, Building2, CalendarClock, CalendarDays, ChartColumn, ChevronDown, ClipboardCheck, ClipboardList, FileText, GraduationCap,
-  LayoutDashboard, LogOut, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, UsersRound, X, History, WifiOff,
+  LayoutDashboard, LogOut, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, UsersRound, X, History, WifiOff, DoorOpen, Award,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -25,6 +25,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     { to: '/corrections', label: 'Corrections', icon: FileText, perms: ['attendance.corrections.review', 'attendance.correction.request', 'attendance.child.read'] },
     { to: '/leave', label: 'Leave', icon: CalendarDays, perms: ['leave.request', 'leave.review'] },
     { to: '/timetable', label: 'Timetable', icon: CalendarClock, perms: ['timetable.read', 'timetable.manage'] },
+    { to: '/campus', label: 'Campus entry', icon: DoorOpen, perms: ['campus.read', 'attendance.entry'] },
   ] },
   { section: 'People', items: [
     { to: '/students', label: 'Students', icon: GraduationCap, perms: ['students.read'] },
@@ -34,6 +35,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Management', items: [
     { to: '/academics', label: 'Academics', icon: BookOpen, perms: ['academic.manage'] },
     { to: '/reports', label: 'Reports', icon: ChartColumn, perms: ['reports.read'] },
+    { to: '/exams', label: 'Exam eligibility', icon: Award, perms: ['exams.manage', 'exams.confirm'] },
     { to: '/insights', label: 'Insights', icon: Sparkles, perms: ['ai.risk.read'] },
     { to: '/settings', label: 'Settings', icon: Settings, perms: ['institution.manage', 'users.manage', 'roles.manage', 'attendance.policy.manage', 'audit.read'] },
     { to: '/platform', label: 'Platform admin', icon: ShieldCheck, platform: true },

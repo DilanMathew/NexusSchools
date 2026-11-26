@@ -8,8 +8,9 @@ import { STATUS_META, type AttendanceStatus } from '../../lib/types';
 import { Badge, Button, Card, Empty, Field, Modal, PageHeader, Pagination, QueryState, Select, Tabs, useToast } from '../../components/ui';
 import { FormModal } from '../../components/FormModal';
 import { fmtDate, fmtDateTime, titleCase } from '../../lib/format';
+import { DevicesSettings } from './Devices';
 
-type Tab = 'setup' | 'institution' | 'policy' | 'users' | 'roles' | 'audit' | 'account';
+type Tab = 'setup' | 'institution' | 'policy' | 'users' | 'roles' | 'devices' | 'audit' | 'account';
 interface Inst { id: string; name: string; type: string; slug: string; logoUrl: string | null; primaryColor: string; timezone: string; locale: string; contactEmail: string | null; contactPhone: string | null; address: string | null; isDemo: boolean;
   settings: { modules: Record<string, boolean>; terminology: Record<string, string>; notificationSettings: Record<string, unknown>; workingDays: number[] }; branches: { id: string; name: string; code: string; isMain: boolean }[];
   subscription: { status: string; planName: string; planCode: string; endsAt: string | null; trialEndsAt: string | null; limits: Record<string, number>; features: string[] } | null }
@@ -23,6 +24,7 @@ export default function Settings() {
     { key: 'policy', label: 'Attendance policy', show: true },
     { key: 'users', label: 'Users', show: can('users.read', 'users.manage') },
     { key: 'roles', label: 'Roles & permissions', show: can('roles.read', 'roles.manage') },
+    { key: 'devices', label: 'Devices & cards', show: can('devices.manage') },
     { key: 'audit', label: 'Audit log', show: can('audit.read') },
     { key: 'account', label: 'My account', show: true },
   ];
@@ -37,6 +39,7 @@ export default function Settings() {
       {tab === 'policy' && <PolicySettings />}
       {tab === 'users' && <UsersSettings />}
       {tab === 'roles' && <RolesSettings />}
+      {tab === 'devices' && <DevicesSettings />}
       {tab === 'audit' && <AuditLog />}
       {tab === 'account' && <Account />}
     </div>

@@ -26,6 +26,8 @@ import { announcementsRouter } from './modules/announcements/routes.js';
 import { qrPublicRouter } from './modules/attendance/qr.js';
 import { reportsRouter } from './modules/reports/routes.js';
 import { aiRouter } from './modules/ai/routes.js';
+import { devicesRouter, deviceIngestRouter } from './modules/devices/routes.js';
+import { examsRouter } from './modules/exams/routes.js';
 import { pool } from './db/client.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -58,6 +60,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/platform', authenticate, platformRouter);
   app.use('/api/institutions', authenticate, createInstitutionForUser);
+  app.use('/api/device', deviceIngestRouter);
 
   // Everything below is tenant-scoped: authenticate → resolve membership → permission checks per route.
   const t = Router();
@@ -78,6 +81,8 @@ export function createApp() {
   t.use('/notifications', notificationsRouter);
   t.use('/announcements', announcementsRouter);
   t.use('/ai', aiRouter);
+  t.use('/devices', devicesRouter);
+  t.use('/exams', examsRouter);
   t.use('/me', meRouter);
   app.use('/api/t', t);
 

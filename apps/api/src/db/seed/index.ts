@@ -15,6 +15,8 @@ import { addDays, eachDate, isoWeekday, todayIn } from '../../lib/dates.js';
 import { bulkInsert, FIRST, LAST, rng } from './util.js';
 
 export const DEMO_PASSWORD = 'Demo@AttendIQ2026';
+/** Bump when demo content changes; servers with SEED_DEMO=true rebuild demo tenants (only) on next start. */
+export const DEMO_SEED_VERSION = 2;
 const uuid = (): string => crypto.randomUUID();
 const SCALE = Number(process.env.SEED_SCALE ?? '1');
 
@@ -120,6 +122,7 @@ async function seedInstitution(cfg: Cfg, demoHash: string) {
     };
     addUser(`admin@${cfg.domain}`, cfg.type === 'school' ? 'Suresh Babu' : 'Anitha Krishnan', 'admin');
     addUser(`principal@${cfg.domain}`, cfg.type === 'school' ? 'Dr. Meenakshi Sundaram' : 'Dr. Venkatesh Iyer', 'principal');
+    addUser(`gate@${cfg.domain}`, 'Gate Operator', 'attendance_operator');
 
     // Academic year and term
     const yearId = uuid();
@@ -377,6 +380,16 @@ async function seedInstitution(cfg: Cfg, demoHash: string) {
       [uuid(), I, 'Parent–teacher meeting', 'Parent–teacher meetings will be held on Saturday from 9:30 AM. (Demo announcement)', ['guardians', 'staff'], ownerId, `${addDays(today, -1)}T05:00:00Z`],
     ]);
 
+    // Campus gate demo: one reader, cards for the first 120 students, today's check-ins (separate from class attendance).
+    const deviceId = uuid();
+    await c.query(`insert into registered_devices (id, institution_id, name, kind, location, key_hash, last_seen_at) values ($1,$2,'Main gate reader','rfid_reader','Gate 1',$3, now())`, [deviceId, I, crypto.randomBytes(32).toString('hex')]);
+    const carded = students.slice(0, 120);
+    await bulkInsert(c, 'rfid_cards', ['id', 'institution_id', 'student_id', 'card_uid'], carded.map((s2, i) => [uuid(), I, s2.id, `${cfg.key === 'school' ? 'ABC' : 'XYZ'}-CARD-${String(i + 1).padStart(5, '0')}`]));
+    const gateStart = cfg.type === 'school' ? 8 * 60 + 5 : 8 * 60 + 30;
+    await bulkInsert(c, 'campus_events', ['id', 'institution_id', 'student_id', 'device_id', 'direction', 'source', 'occurred_at', 'dedupe_key'],
+      carded.filter(() => R.chance(0.9)).map((s2, i) => { const m = gateStart + R.int(0, 60); return [uuid(), I, s2.id, deviceId, 'in', 'rfid_reader', new Date(`${today}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00+05:30`).toISOString(), `${deviceId}:seed-${i}`]; }));
+    if (cfg.type === 'college') await c.query(`insert into examination_sessions (institution_id, academic_year_id, term_id, name, attendance_from, attendance_to, threshold) values ($1,$2,$3,'End-semester examinations (Demo)',$4,$5,'75')`, [I, yearId, termId, cfg.attendanceFrom, today]);
+
     // In-app notifications for guardians of students absent in the most recent days (mirrors live behaviour).
     const recentAbs = (await c.query<{ user_id: string; first_name: string; session_date: string }>(
       `select g.user_id, s.first_name, se.session_date from attendance_records r join attendance_sessions se on se.id = r.session_id join students s on s.id = r.student_id
@@ -385,7 +398,7 @@ async function seedInstitution(cfg: Cfg, demoHash: string) {
     const notifRows = recentAbs.map((n) => [uuid(), I, n.user_id, 'attendance.absent', `${n.first_name} marked absent`, `${n.first_name} was marked absent on ${n.session_date}.`]);
     await bulkInsert(c, 'notifications', ['id', 'institution_id', 'recipient_user_id', 'event_key', 'title', 'body'], notifRows);
 
-    await c.query(`insert into audit_logs (institution_id, actor_user_id, action, entity_type, entity_id, metadata) values ($1,$2,'demo.seeded','institution',$4,$3)`, [I, ownerId, JSON.stringify({ students: students.length, staff: staffList.length, sessions: sessionRows.length, records: recordRows.length }), I]);
+    await c.query(`insert into audit_logs (institution_id, actor_user_id, action, entity_type, entity_id, metadata) values ($1,$2,'demo.seeded','institution',$4,$3)`, [I, ownerId, JSON.stringify({ seedVersion: DEMO_SEED_VERSION, students: students.length, staff: staffList.length, sessions: sessionRows.length, records: recordRows.length }), I]);
     await c.query('commit');
     console.log(`✓ ${cfg.name}: ${students.length} students, ${staffList.length} staff, ${sections.length} sections, ${ttRows.length} timetable slots, ${sessionRows.length} sessions, ${recordRows.length} records (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   } catch (e) {
@@ -406,7 +419,7 @@ export async function seedDemo() {
   await pool.query('analyze');
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}) — DEMO DATA ONLY:`);
   console.log('  Platform admin: superadmin@attendiq.example');
-  for (const d of ['abc-school.example', 'xyz-college.example']) console.log(`  ${d}: owner@, admin@, principal@, teacher@, student@, parent@`);
+  for (const d of ['abc-school.example', 'xyz-college.example']) console.log(`  ${d}: owner@, admin@, principal@, teacher@, student@, parent@, gate@`);
 }
 
 if (process.argv[1] && /seed[\\/]index\.(ts|js)$/.test(process.argv[1])) {

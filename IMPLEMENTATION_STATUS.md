@@ -1,49 +1,49 @@
 # NEXUS AttendIQ — Implementation status
 
-_Checkpoint: 26 Nov 2026. Paused here at the user's request; resume from "Next up"._
+_Updated 26 Nov 2026. Live demo: https://attendiq-app-production.up.railway.app (demo data only)._
 
-## Done and tested
+**Verification:**
+- 56 automated API tests pass (`npm test`).
+- The API and web app typecheck and build.
+- A browser sweep across 7 roles and every screen showed no JavaScript errors and no failed API calls.
 
-**Backend API (Express + TypeScript + Drizzle/PostgreSQL)** — 47 automated tests pass (`npm test`).
+## Complete
 
-- **Multi-tenancy**: every tenant route needs a valid membership (from the `X-Institution-Id` header plus the logged-in user). Record IDs and foreign-key references are checked against the tenant. Isolation tests try cross-tenant read, update, delete and references.
-- **Auth**: registration and onboarding, login with lockout after 5 failures, rotating refresh tokens (reuse revokes the whole token family), password change and reset, httpOnly cookie.
-- **RBAC**: 42 permissions and 10 system roles per institution, plus custom roles. Privilege escalation is blocked.
-- **Platform admin**: institution list and stats, suspend/activate, subscription change, platform audit. No implicit access to student data.
-- **Academic structure**: years, terms, departments, programmes, class levels, sections, subjects, course offerings (electives), periods, rooms, calendar.
-- **People**: students (CRUD, transfer, promotion, status history, CSV import with preview/validation/duplicate checks, duplicate detection, ID-card data with an opaque QR), guardians (links, logins), staff (logins, workload, staff leave).
-- **Attendance engine**: policy-driven percentage (late/half-day weights, leave/OD/holiday handling, day vs session mode), versioned policy, eligibility bands, sessions-needed and max-missable, consecutive absences.
-- **Attendance workflow**: timetable-driven sessions, draft/submit (atomic, roster-complete), submission deadlines, teacher edit window, audited corrections, student/parent correction requests, cancellation.
-- **QR attendance**: HMAC-signed rotating tokens, replay/stale rejection, one scan per student, suspicious-scan flag.
-- **Offline sync**: queue replay that never overwrites online submissions.
-- **Timetable**: conflict detection (faculty, room and section) and a whole-timetable scan.
-- **Leave**: apply, review, notify. Approval does not rewrite attendance.
-- **Notifications**: in-app notifications with a delivery log. External channels are logged as `skipped`, because no provider is configured.
-- **Reports** (JSON and CSV): student/class/subject/department/shortage/late, monthly register, daily register, consecutive absences, submission compliance.
-- **Analytics**: dashboard overview, at-risk list, subject stats.
-- **Rule-based insights**: attendance-drop detection and data-quality checks.
-- **Demo seed**: ABC International School (504 students, 30 staff, daily register) and XYZ College of Engineering (1,216 students, 80 faculty, subject-wise), about 377k attendance records. All of it is labelled demo data.
+| Area | What works |
+|---|---|
+| SaaS & tenancy | Institution registration and onboarding by type, branding, modules, branches, suspension, JSON export, audit log, strict tenant isolation (tested) |
+| Roles | 10 system roles plus custom roles, 46 permissions enforced server-side, escalation-proof role grants, additive permission sync for existing tenants |
+| Academic structure | Years, terms/semesters, departments, programmes, classes / years of study, sections, subjects, subject allocation (incl. electives), periods, rooms, calendar, setup checklist |
+| Students & guardians | CRUD, profiles, status history, transfers, promotion, CSV import with preview / duplicates / errors, duplicate detection, portal logins, ID cards with opaque QR + reissue |
+| Staff | CRUD, logins, workload, staff leave workflow |
+| Attendance | Policy-driven engine, versioned policy, daily / period / subject / lab / event sessions, fast marking UI, deadlines, audited corrections, student/parent correction requests, cancellation |
+| QR attendance | Rotating signed codes, scan page with camera, replay and duplicate protection, suspicious-scan flag |
+| Offline | Teacher offline queue + sync with conflict reporting, PWA install, app-shell caching |
+| Timetable | Grid by class, faculty or room; drag-and-drop; clash prevention; clash scan |
+| Portals | Student and parent: attendance, subject-wise, monthly, shortage calculator, history, correction requests, leave, timetable, notifications |
+| Leave | Student/parent apply → class teacher review → notifications. Leave never rewrites attendance |
+| Notifications | In-app notification centre, preferences, delivery log per channel, announcements with audience, scheduling and expiry |
+| Reports | Attendance/eligibility, class, subject, department, shortage, late, monthly and daily registers, consecutive absences, submission compliance. Export to Excel (.xlsx), CSV, or print / save as PDF |
+| Dashboards | Admin/principal (scoped for HOD), teacher, student/parent, platform |
+| Insights & AI | At-risk list with explanations, attendance-drop detection, data-quality checks, institutional assistant (LLM when configured, built-in otherwise; permission-scoped, read-only, logged, plan-capped) |
+| Devices & campus | Reader registration (key shown once), vendor adapter layer, RFID/NFC cards (assign/replace/lost), idempotent offline-safe ingest, campus summary (late, early departure, on campus), manual gate entry, visitor log |
+| Exams | Exam setup, eligibility computation, exemptions, separate official confirmation permission, CSV |
+| Deployment | Single-service Docker build, Railway project with Postgres, health checks, auto-migrations, versioned demo seed |
+| Docs | README, ARCHITECTURE, DATABASE_SCHEMA, API_DOCUMENTATION, ATTENDANCE_ENGINE, AI_AGENT_DESIGN, SECURITY, DEPLOYMENT, ENVIRONMENT_VARIABLES, TESTING (in `docs/`) |
 
-**Web app (React + Vite + Tailwind + TanStack Query)** — builds and typechecks.
+## Not done, and why
 
-- Login, institution registration, forgot/reset password.
-- App shell: role-based sidebar, institution switcher, notifications badge, offline indicator, mobile drawer.
-- Admin/principal dashboard with live data.
-- Teacher screens: today's classes, the fast marking screen (all present, search, undo, draft, submit), the QR display panel, correction with history, and the offline queue.
-- Attendance records list and the corrections review queue.
-- PWA manifest and service worker.
-
-## Not done yet (next up, in order)
-
-1. **Web screens whose APIs already exist**: student/parent portal (My attendance, shortage calculator, QR scan page), students list/profile/import, guardians, staff, academics setup, timetable grid (drag and drop), leave, reports, insights, announcements, notifications, settings (institution, modules, policy, users and roles, audit), platform console, ID-card print. These are hidden from the menu until built.
-2. PDF/Excel exports (CSV only today). Bulk ID-card PDF sheets.
-3. LLM assistant (Phase 7): provider abstraction, permission-aware tools, usage tracking. Today `/ai/status` reports it as unavailable.
-4. Email/SMS/WhatsApp/push providers. Needs provider credentials; the adapter interface is in place.
-5. RFID/NFC device APIs, geofence check, campus entry/exit, examination eligibility module, faculty substitution.
-6. Subscription billing and payment, plan-limit enforcement, Redis/BullMQ jobs, file uploads (photos and documents).
-7. Docs (ARCHITECTURE, DATABASE_SCHEMA, API, SECURITY, DEPLOYMENT, TESTING), end-to-end browser tests, Railway deployment, Tamil translations.
-
-## Known limitations
-
-- Platform support-access grants: the table exists but there is no workflow yet.
-- Consent records under the DPDP Act still need to be designed with legal review.
+| Item | Status |
+|---|---|
+| Email / SMS / WhatsApp / push delivery | The adapter interface and per-channel delivery log are in place. Each channel needs **provider credentials** (e.g. an SMTP/SES key, an SMS gateway, a WhatsApp Business account, Web Push VAPID keys). Until a provider is configured, these deliveries are logged as `skipped`. |
+| LLM assistant on the live site | Implemented. Needs an `ANTHROPIC_API_KEY` set as a Railway secret with `AI_PROVIDER=anthropic`; until then the built-in mode answers. |
+| Subscription payments | Plans, trials, limits from the database, and admin plan changes all work. Online payment needs a payment gateway account (e.g. Razorpay) and is not implemented. Plan limits are enforced for the AI assistant only, not yet for student and staff counts. |
+| DPDP consent and data-rights workflows, privacy policy, terms | Need legal input; see `docs/SECURITY.md`. |
+| Location-assisted attendance (geofence) | Not implemented; the module toggle is marked "no effect yet". |
+| Faculty substitution timetable | Not implemented (admins can take attendance for any class). |
+| Photo and document uploads | Need object storage (e.g. a Railway bucket); photo URLs only for now. |
+| Redis / BullMQ background jobs | Not needed yet: notifications are written in the request transaction. Needed once external channels and scheduled messages are added. |
+| Tamil UI translation | The locale setting exists; the UI strings are English only. |
+| LLM parent-message drafting, daily narrative summaries | Not implemented. |
+| Committed browser end-to-end tests in CI | A manual Playwright sweep was run; CI tests are still to do. |
+| Support-access grant workflow for platform staff | Table only. |

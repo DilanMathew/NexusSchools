@@ -27,6 +27,8 @@ const Announcements = lazy(() => import('./pages/Announcements'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Settings = lazy(() => import('./pages/settings/Settings'));
 const Platform = lazy(() => import('./pages/platform/Platform'));
+const Campus = lazy(() => import('./pages/campus/Campus'));
+const Exams = lazy(() => import('./pages/exams/Exams'));
 
 const FullScreenSpinner = () => <div className="flex h-screen items-center justify-center"><Spinner className="h-8 w-8" /></div>;
 
@@ -70,6 +72,8 @@ export function App() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/platform" element={<Platform />} />
+        <Route path="/campus" element={<Campus />} />
+        <Route path="/exams" element={<Exams />} />
         <Route path="*" element={<Empty title="Page not found" hint="The page you are looking for does not exist." />} />
       </Route>
     </Routes>

@@ -1,6 +1,6 @@
 export interface Membership { institutionId: string; name: string; slug: string; type: string; status: string; logoUrl: string | null; primaryColor: string; isDemo: boolean; roles: { key: string; name: string }[] }
 export interface User { id: string; email: string; fullName: string; phone: string | null; platformRole: string | null; preferredLanguage: string }
-export interface TenantContext { institutionId: string; institutionType: string; roleKeys: string[]; permissions: string[]; staffId: string | null; studentId: string | null; guardianId: string | null }
+export interface TenantContext { institutionId: string; institutionType: string; timezone: string; roleKeys: string[]; permissions: string[]; staffId: string | null; studentId: string | null; guardianId: string | null }
 export interface Paged<T> { data: T[]; meta: { page: number; pageSize: number; total: number; totalPages: number } }
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave' | 'excused' | 'medical_leave' | 'on_duty' | 'holiday' | 'not_applicable' | 'pending_verification';
 

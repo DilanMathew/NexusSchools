@@ -109,7 +109,7 @@ authRouter.get('/me', authenticate, async (req, res) => {
   let context = null;
   if (instId && ms.some((m) => m.institutionId === instId)) {
     const ctx = await loadTenantContext(u.id, instId).catch(() => null);
-    if (ctx) context = { institutionId: ctx.institutionId, institutionType: ctx.institutionType, roleKeys: ctx.roleKeys, permissions: [...ctx.permissions], staffId: ctx.staffId, studentId: ctx.studentId, guardianId: ctx.guardianId };
+    if (ctx) context = { institutionId: ctx.institutionId, institutionType: ctx.institutionType, timezone: ctx.timezone, roleKeys: ctx.roleKeys, permissions: [...ctx.permissions], staffId: ctx.staffId, studentId: ctx.studentId, guardianId: ctx.guardianId };
   }
   res.json({ data: { user: publicUser(u), memberships: ms, context } });
 });
