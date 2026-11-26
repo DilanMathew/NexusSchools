@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { and, asc, count, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { registeredDevices, rfidCards, campusEvents, visitorLogs, students, studentEnrolments, sections, classLevels } from '../../db/schema/index.js';
@@ -157,7 +157,7 @@ devicesRouter.post('/visitors/:id/checkout', requirePermission('attendance.entry
  * so a reader that buffered events offline can resend its whole buffer safely.
  */
 export const deviceIngestRouter = Router();
-deviceIngestRouter.post('/events', rateLimit({ windowMs: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : 120, keyGenerator: (req) => String(req.header('x-device-key') ?? req.ip), standardHeaders: true, legacyHeaders: false }), async (req, res) => {
+deviceIngestRouter.post('/events', rateLimit({ windowMs: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : 120, keyGenerator: (req) => req.header('x-device-key') ?? ipKeyGenerator(req.ip ?? ''), standardHeaders: true, legacyHeaders: false }), async (req, res) => {
   const key = req.header('x-device-key');
   if (!key) throw unauthorized('X-Device-Key header required');
   const [d] = await db.select().from(registeredDevices).where(eq(registeredDevices.keyHash, sha256(key)));
