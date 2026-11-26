@@ -14,7 +14,7 @@ export function defaultModules(type: InstitutionType): Record<string, boolean> {
   const school = isSchoolLike(type);
   return {
     dailyAttendance: school,
-    periodAttendance: true,
+    periodAttendance: !school,
     subjectAttendance: !school,
     assemblyAttendance: type === 'school',
     labAttendance: !school,

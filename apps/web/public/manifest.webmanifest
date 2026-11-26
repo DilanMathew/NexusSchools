@@ -1,0 +1,12 @@
+{
+  "name": "NEXUS AttendIQ",
+  "short_name": "AttendIQ",
+  "description": "Every student accounted for. Every attendance record traceable.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e3a8a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

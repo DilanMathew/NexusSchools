@@ -95,6 +95,8 @@ attendanceRouter.get('/today', requirePermission('attendance.take', 'attendance.
       mineOnly ? eq(courseOfferings.staffId, ctx.staffId!) : undefined))
     .orderBy(asc(periods.ordinal)).limit(500);
 
+  // Daily-register institutions do not take per-period attendance unless the module is enabled.
+  if (settings?.modules?.periodAttendance === false && settings?.modules?.subjectAttendance !== true) entries.splice(0);
   const sess = entries.length ? await db.select({ id: attendanceSessions.id, offeringId: attendanceSessions.courseOfferingId, periodId: attendanceSessions.periodId, status: attendanceSessions.status, submittedAt: attendanceSessions.submittedAt })
     .from(attendanceSessions).where(and(eq(attendanceSessions.institutionId, ctx.institutionId), eq(attendanceSessions.sessionDate, date), inArray(attendanceSessions.courseOfferingId, entries.map((e) => e.offeringId)))) : [];
 

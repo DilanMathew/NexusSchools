@@ -103,6 +103,7 @@ export async function submissionCompliance(inst: string, from: string, to: strin
   const [settings] = await db.select().from(institutionSettings).where(eq(institutionSettings.institutionId, inst));
   const holidays = await db.select().from(calendarEvents).where(and(eq(calendarEvents.institutionId, inst), inArray(calendarEvents.kind, ['holiday', 'vacation']), lte(calendarEvents.startDate, to), gte(calendarEvents.endDate, from), isNull(calendarEvents.departmentId)));
   const isOff = (d: string) => !(settings?.workingDays ?? [1, 2, 3, 4, 5, 6]).includes(isoWeekday(d)) || holidays.some((h) => h.startDate <= d && h.endDate >= d);
+  if (settings?.modules?.dailyAttendance && !settings?.modules?.periodAttendance) return dailyCompliance(inst, from, to, isOff);
   const entries = await db.select({ entryId: timetableEntries.id, dow: timetableEntries.dayOfWeek, periodId: timetableEntries.periodId, offeringId: courseOfferings.id, staffId: staff.id, staffName: staff.fullName, subject: subjects.name, ef: timetableEntries.effectiveFrom, et: timetableEntries.effectiveTo })
     .from(timetableEntries).innerJoin(courseOfferings, eq(courseOfferings.id, timetableEntries.courseOfferingId)).innerJoin(subjects, eq(subjects.id, courseOfferings.subjectId)).leftJoin(staff, eq(staff.id, courseOfferings.staffId))
     .innerJoin(academicYears, and(eq(academicYears.id, timetableEntries.academicYearId), eq(academicYears.isCurrent, true)))
@@ -128,6 +129,31 @@ export async function submissionCompliance(inst: string, from: string, to: strin
   const rows = [...byStaff.values()].map((r) => ({ ...r, complianceRate: r.expected ? Math.round((r.submitted / r.expected) * 10000) / 100 : null })).sort((a, b) => (a.complianceRate ?? 100) - (b.complianceRate ?? 100));
   const totals = rows.reduce((a, r) => ({ expected: a.expected + r.expected, submitted: a.submitted + r.submitted, pending: a.pending + r.pending }), { expected: 0, submitted: 0, pending: 0 });
   return { from, to, totals, staff: rows };
+}
+
+/** Daily-register institutions: one register expected per section per working day, owed by the class teacher. */
+async function dailyCompliance(inst: string, from: string, to: string, isOff: (d: string) => boolean) {
+  const secs = await db.select({ id: sections.id, name: sections.name, level: classLevels.name, staffId: staff.id, staffName: staff.fullName }).from(sections)
+    .innerJoin(classLevels, eq(classLevels.id, sections.classLevelId)).innerJoin(academicYears, and(eq(academicYears.id, sections.academicYearId), eq(academicYears.isCurrent, true)))
+    .leftJoin(staff, eq(staff.id, sections.classTeacherStaffId)).where(eq(sections.institutionId, inst));
+  const sess = await db.select({ sectionId: attendanceSessions.sectionId, date: attendanceSessions.sessionDate, status: attendanceSessions.status }).from(attendanceSessions)
+    .where(and(eq(attendanceSessions.institutionId, inst), eq(attendanceSessions.kind, 'daily'), gte(attendanceSessions.sessionDate, from), lte(attendanceSessions.sessionDate, to)));
+  const sm = new Map(sess.map((s) => [`${s.sectionId}|${s.date}`, s.status]));
+  const byStaff = new Map<string, { staffId: string | null; staffName: string; expected: number; submitted: number; pending: number; cancelled: number; missing: { date: string; subject: string }[] }>();
+  for (const d of eachDate(from, to)) {
+    if (isOff(d)) continue;
+    for (const s of secs) {
+      const k = s.staffId ?? 'unassigned';
+      const acc = byStaff.get(k) ?? { staffId: s.staffId, staffName: s.staffName ?? 'Unassigned', expected: 0, submitted: 0, pending: 0, cancelled: 0, missing: [] };
+      const st = sm.get(`${s.id}|${d}`);
+      if (st === 'cancelled') acc.cancelled++;
+      else { acc.expected++; if (st === 'submitted' || st === 'locked') acc.submitted++; else { acc.pending++; if (acc.missing.length < 20) acc.missing.push({ date: d, subject: `Daily register ${s.level} ${s.name}` }); } }
+      byStaff.set(k, acc);
+    }
+  }
+  const rows = [...byStaff.values()].map((r) => ({ ...r, complianceRate: r.expected ? Math.round((r.submitted / r.expected) * 10000) / 100 : null })).sort((a, b) => (a.complianceRate ?? 100) - (b.complianceRate ?? 100));
+  const totals = rows.reduce((a, r) => ({ expected: a.expected + r.expected, submitted: a.submitted + r.submitted, pending: a.pending + r.pending }), { expected: 0, submitted: 0, pending: 0 });
+  return { from, to, totals, staff: rows, mode: 'daily' as const };
 }
 
 analyticsRouter.get('/compliance', requirePermission('analytics.read', 'reports.read'), async (req, res) => {
